@@ -84,7 +84,14 @@ def parse_money_br(s: str) -> float:
     except Exception: return 0.0
 
 # ============ App Config ============
-st.set_page_config(page_title="DAVI", layout="wide")
+st.set_page_config(
+    page_title="DAVI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+    menu_items={
+        'About': 'App DAVI - Controle Financeiro Inteligente'
+    }
+)
 
 def inject_styles():
     """Injeta estilos CSS personalizados e fonte Inter"""
@@ -107,10 +114,46 @@ inject_styles()
 
 # ============ Session State Initialization ============
 def init_session_state():
+    # Verificar cookie de autenticação
     if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
+        saved_user = st.session_state.get("saved_user", None)
+        if saved_user:
+            st.session_state.authenticated = True
+            st.session_state.user = saved_user
+        else:
+            st.session_state.authenticated = False
     if "user" not in st.session_state:
         st.session_state.user = None
+    if "menu" not in st.session_state:
+        st.session_state.menu = "Dashboard"
+    if "confirmar_exclusao" not in st.session_state:
+        st.session_state.confirmar_exclusao = {}
+    if "confirmar_exclusao_balde" not in st.session_state:
+        st.session_state.confirmar_exclusao_balde = {}
+    if "confirmar_limpar" not in st.session_state:
+        st.session_state.confirmar_limpar = False
+    if "editing_balances" not in st.session_state:
+        st.session_state.editing_balances = False
+    if "editing_total" not in st.session_state:
+        st.session_state.editing_total = False
+        
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.user = None
+    st.session_state.saved_user = None
+    st.rerun()
+    if "menu" not in st.session_state:
+        st.session_state.menu = "Dashboard"
+    if "confirmar_exclusao" not in st.session_state:
+        st.session_state.confirmar_exclusao = {}
+    if "confirmar_exclusao_balde" not in st.session_state:
+        st.session_state.confirmar_exclusao_balde = {}
+    if "confirmar_limpar" not in st.session_state:
+        st.session_state.confirmar_limpar = False
+    if "editing_balances" not in st.session_state:
+        st.session_state.editing_balances = False
+    if "editing_total" not in st.session_state:
+        st.session_state.editing_total = False
     if "menu" not in st.session_state:
         st.session_state.menu = "Dashboard"
     if "confirmar_exclusao" not in st.session_state:
@@ -230,6 +273,20 @@ def create_user(db: Session, username: str, password: str) -> User:
     db.refresh(user)
     return user
 
+@st.cache_data(ttl=300)
+def load_cached_data(user_id: int):
+    with get_db() as db:
+        profile = get_profile(db, user_id)
+        buckets = load_buckets(db, user_id)
+        giants = load_giants(db, user_id)
+        movements = load_movements(db, user_id)
+        bills = load_bills(db, user_id)
+        return profile, buckets, giants, movements, bills
+
+@st.cache_resource
+def get_cached_db():
+    return SessionLocal()
+
 def main():
     # Inicializar todas as variáveis de estado
     init_session_state()
@@ -249,57 +306,38 @@ def main():
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    margin: 2rem auto;
-                    padding: 2rem;
-                    max-width: 800px;
+                    margin: 1.5rem auto;
+                    padding: 1.5rem;
+                    max-width: 600px;
                     text-align: center;
-                    animation: fadeIn 1s ease-out;
-                    position: relative;
+                    animation: fadeIn 0.8s ease-out;
                 }
                 .brand-emoji {
-                    font-size: 3.5em;
+                    font-size: 2.5em;
                     margin-bottom: 0.5rem;
-                    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
-                    animation: float 3s ease-in-out infinite;
+                    opacity: 0.9;
                 }
                 .brand-title {
                     font-family: 'Poppins', sans-serif;
                     font-weight: 900;
-                    font-size: 6.5em;
+                    font-size: 5em;
                     line-height: 1;
                     background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
                     margin: 0;
                     padding: 0;
-                    letter-spacing: -0.03em;
-                    text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.15);
-                    transform: perspective(1000px) rotateX(8deg);
+                    letter-spacing: -0.02em;
                 }
                 .brand-slogan {
                     font-family: 'Inter', sans-serif;
-                    font-weight: 800;
-                    font-size: 1.6em;
-                    background: linear-gradient(135deg, #059669 0%, #10B981 100%);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    margin: 1rem 0 0 0;
+                    font-weight: 600;
+                    font-size: 1.1em;
+                    color: #10B981;
+                    margin: 0.75rem 0 0 0;
+                    opacity: 0.9;
                     letter-spacing: -0.01em;
-                    transform: translateY(-2px);
-                    transition: all 0.3s ease;
                 }
-                .brand-slogan:hover {
-                    transform: translateY(-4px);
-                    filter: brightness(1.1);
-                }
-                .hero-decoration {
-                    position: absolute;
-                    font-size: 2em;
-                    opacity: 0.5;
-                    animation: pulse 2s ease-in-out infinite;
-                }
-                .hero-decoration.left { left: 5%; top: 40%; }
-                .hero-decoration.right { right: 5%; top: 40%; }
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(-20px); }
                     to { opacity: 1; transform: translateY(0); }
@@ -314,8 +352,6 @@ def main():
                 }
             </style>
             <div class="hero-section">
-                <div class="hero-decoration left">💪</div>
-                <div class="hero-decoration right">💫</div>
                 <div class="brand-emoji">🎯</div>
                 <h1 class="brand-title">DAVI</h1>
                 <h3 class="brand-slogan">Vença seus gigantes financeiros</h3>
@@ -331,12 +367,16 @@ def main():
                 username = st.text_input("Usuário")
                 password = st.text_input("Senha", type="password")
                 
+                manter_login = st.checkbox("Manter conectado")
+                
                 if st.form_submit_button("Entrar"):
                     with get_db() as db:
                         user = auth_user(db, username, password)
                         if user:
                             st.session_state.authenticated = True
                             st.session_state.user = user
+                            if manter_login:
+                                st.session_state.saved_user = user
                             st.rerun()
                         else:
                             st.error("Usuário ou senha inválidos")
@@ -368,38 +408,54 @@ def main():
         user = st.session_state.user
         
         # Carregar dados do usuário
-        profile = get_profile(db, user.id)
-        buckets = load_buckets(db, user.id)
-        giants = load_giants(db, user.id)
-        movements = load_movements(db, user.id)
-        bills = load_bills(db, user.id)
+        profile, buckets, giants, movements, bills = load_cached_data(user.id)
         
         # Calcular saldo disponível
         saldo = profile.monthly_income - profile.monthly_expense
         
         # Menu lateral com estilo personalizado
+        # Adicionar botão de logout no topo direito
+        col1, col2 = st.columns([6, 1])
+        with col2:
+            if st.button("⨯", type="secondary", help="Sair", key="logout_btn"):
+                logout()
+                
         with st.sidebar:
-            st.markdown("# ☰ Menu")
+            st.markdown('<h1 style="color: #1E40AF; font-size: 1.5rem; margin-bottom: 1rem;">☰ Menu</h1>', unsafe_allow_html=True)
             st.divider()
             
             menu_options = {
-                "📊 Dashboard": "Dashboard",
-                "🎯 Plano de Ataque": "Plano de Ataque",
-                "🪣 Baldes": "Baldes",
-                "💰 Entrada e Saída": "Entrada e Saída",
-                "📚 Livro Caixa": "Livro Caixa",
-                "📅 Calendário": "Calendário",
-                "⚠️ Atrasos & Riscos": "Atrasos & Riscos",
-                "📥 Importar Extrato": "Importar Extrato",
-                "⚙️ Configurações": "Configurações"
+                "Dashboard": "📊  Dashboard",
+                "Plano de Ataque": "🎯  Plano de Ataque",
+                "Baldes": "🪣  Baldes",
+                "Entrada e Saída": "💰  Entrada e Saída",
+                "Livro Caixa": "📚  Livro Caixa",
+                "Calendário": "📅  Calendário",
+                "Atrasos & Riscos": "⚠️  Atrasos & Riscos",
+                "Importar Extrato": "📥  Importar Extrato",
+                "Configurações": "⚙️  Configurações"
             }
+            
+            st.markdown("""
+                <style>
+                    section[data-testid="stSidebar"] .stButton button {
+                        color: #1E40AF !important;
+                        font-weight: 500 !important;
+                        text-align: left !important;
+                        padding-left: 1rem !important;
+                    }
+                    section[data-testid="stSidebar"] .stButton button:hover {
+                        background-color: rgba(30, 64, 175, 0.08) !important;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
             
             if 'menu' not in st.session_state:
                 st.session_state.menu = "Dashboard"
                 
             for label, value in menu_options.items():
-                if st.sidebar.button(label, key=f"menu_{value}", use_container_width=True):
-                    st.session_state.menu = value
+                if st.sidebar.button(value, key=f"menu_{label}", use_container_width=True):
+                    st.session_state.menu = label
                     st.rerun()
             
             menu = st.session_state.menu
@@ -549,7 +605,7 @@ def main():
                             Status: {'✅ Pronto!' if progresso >= 0.95 else '⏳ Acumulando'}
                             """)
                     with col_actions2:
-                        if st.button("🗑️", key=f"del_giant_{giant.id}", type="secondary"):
+                        if st.button("⨯", key=f"del_giant_{giant.id}", type="secondary", help="Excluir"):
                             st.session_state.confirmar_exclusao[giant.id] = True
                     
                     if st.session_state.confirmar_exclusao.get(giant.id):
@@ -691,7 +747,7 @@ def main():
                             help=f"Prioridade: {bucket.description}"
                         )
                     with col2:
-                        if st.button("🗑️", key=f"del_bucket_{bucket.id}", type="secondary"):
+                        if st.button("⨯", key=f"del_bucket_{bucket.id}", type="secondary", help="Excluir"):
                             st.session_state.confirmar_exclusao_balde[bucket.id] = True
                         
                         if st.session_state.confirmar_exclusao_balde.get(bucket.id):
@@ -963,28 +1019,65 @@ def main():
                     for m in movements
                 ]).sort_values("Data", ascending=False)
                 
-                # Mostrar cada movimento com opção de exclusão
-                for idx, row in df.iterrows():
-                    col1, col2, col3, col4, col5 = st.columns([1, 2, 1, 1, 0.5])
-                    with col1:
-                        st.write(row["Data"])
-                    with col2:
-                        st.write(row["Descrição"])
-                    with col3:
-                        st.write(row["Tipo"])
-                    with col4:
-                        st.write(row["Valor"])
-                    with col5:
-                        if st.button("🗑️", key=f"del_mov_{row['ID']}", type="secondary"):
-                            with get_db() as db:
-                                mov = db.query(Movement).get(row['ID'])
-                                if mov:
-                                    db.delete(mov)
-                                    db.commit()
-                                    st.success("Movimentação excluída!")
-                                    time.sleep(0.5)
-                                    st.rerun()
-                    st.divider()
+                # Criar tabela unificada e organizada
+                df_styled = df.copy()
+                df_styled["Ações"] = df_styled["ID"].apply(lambda x: "🗑️")
+                
+                # Reordenar e renomear colunas
+                df_styled = df_styled[["Data", "Descrição", "Tipo", "Valor", "Balde", "Ações"]]
+                
+                # Aplicar estilos condicionais
+                def highlight_row(row):
+                    color = "#10B98120" if "Receita" in row["Tipo"] else "#EF444420"
+                    return [f"background-color: {color}" for _ in range(len(row))]
+                
+                # Mostrar tabela estilizada
+                st.dataframe(
+                    df_styled,
+                    column_config={
+                        "Data": st.column_config.TextColumn(
+                            "Data",
+                            width="small",
+                        ),
+                        "Descrição": st.column_config.TextColumn(
+                            "Descrição",
+                            width="medium",
+                        ),
+                        "Tipo": st.column_config.TextColumn(
+                            "Tipo",
+                            width="small",
+                        ),
+                        "Valor": st.column_config.TextColumn(
+                            "Valor",
+                            width="small",
+                        ),
+                        "Balde": st.column_config.TextColumn(
+                            "Balde",
+                            width="small",
+                        ),
+                        "Ações": st.column_config.Column(
+                            "Ações",
+                            width="small",
+                        ),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                
+                # Handler para exclusão
+                clicked = st.button("Excluir Selecionado", type="secondary")
+                if clicked:
+                    with get_db() as db:
+                        selected_rows = st.session_state.get("selected_rows", [])
+                        for row_index in selected_rows:
+                            mov_id = df.iloc[row_index]["ID"]
+                            mov = db.query(Movement).get(mov_id)
+                            if mov:
+                                db.delete(mov)
+                        db.commit()
+                        st.success("Movimentações selecionadas excluídas!")
+                        time.sleep(0.5)
+                        st.rerun()
             else:
                 st.info("Nenhuma movimentação registrada ainda.")
         
@@ -1069,7 +1162,7 @@ def main():
                         else:
                             st.write("✓")
                     with col5:
-                        if st.button("🗑️", key=f"del_bill_{row['ID']}", type="secondary"):
+                        if st.button("⨯", key=f"del_bill_{row['ID']}", type="secondary", help="Excluir"):
                             bill = db.query(Bill).get(row['ID'])
                             if bill:
                                 db.delete(bill)
