@@ -1,13 +1,13 @@
-# Caminho do arquivo: /Users/gustavomontalvao/Downloads/APP_DAVI_streamlit_v8_1_charts-2/db.py
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
+DB_URL = "sqlite:///./davi.db"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
 
+# Habilitar FKs no SQLite
+with engine.connect() as con:
+    con.exec_driver_sql("PRAGMA foreign_keys=ON;")
+
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()
