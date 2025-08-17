@@ -1,63 +1,45 @@
-import streamlit as st
+from datetime import date, timedelta
+from sqlalchemy.orm import Session
+from db import engine, SessionLocal, Base
+from models import User, Bucket, Giant, Bill, UserProfile, GiantPayment
 
-CUSTOM_CSS = '''<style>
-:root {
-  --primary: #1E3A8A;
-  --success: #10B981;
-  --warn:    #F59E0B;
-  --error:   #EF4444;
-  --text:    #111827;
-  --muted:   #6B7280;
-  --bg:      #FFFFFF;
-  --bg-2:    #F3F4F6;
-}
+print("Criando tabelas...")
+Base.metadata.create_all(bind=engine)
+db: Session = SessionLocal()
 
-[data-testid="stAppViewContainer"] {
-  animation: fadeIn 0.6s ease-out both;
-}
-@keyframes fadeIn {
-  from {opacity:0; transform:translateY(6px);}
-  to   {opacity:1; transform:translateY(0);}
-}
+# Limpar e popular
+db.query(GiantPayment).delete()
+db.query(Bill).delete()
+db.query(Giant).delete()
+db.query(Bucket).delete()
+db.query(UserProfile).delete()
+db.query(User).delete()
+db.commit()
 
-[data-testid="stAlert"] {
-  animation: slideIn .45s cubic-bezier(.2,.7,.2,1) both;
-}
-@keyframes slideIn {
-  from {opacity:0; transform:translateX(-10px);}
-  to   {opacity:1; transform:translateX(0);}
-}
+u = User(name="Gustavo")
+db.add(u); db.commit(); db.refresh(u)
 
-button[kind="primary"] {
-  background: var(--primary) !important;
-  border-color: var(--primary) !important;
-  color: #FFF !important;
-  transition: transform .1s ease, box-shadow .2s ease;
-}
-button[kind="secondary"] {
-  color: var(--primary) !important;
-  border-color: var(--primary) !important;
-  transition: transform .1s ease, box-shadow .2s ease;
-}
-button:hover {
-  transform: scale(1.02);
-  box-shadow: 0 6px 16px rgba(0,0,0,.12);
-}
+prof = UserProfile(user_id=u.id, monthly_income=8000.0, monthly_expense=4500.0)
+db.add(prof); db.commit()
 
-.pulse { animation: pulse 2s ease-in-out infinite; }
-@keyframes pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.35); }
-  70%  { box-shadow: 0 0 0 12px rgba(16,185,129,0); }
-  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
-}
+buckets = [
+    Bucket(user_id=u.id, name="Dízimo", description="", percent=10, type="dizimo", balance=0),
+    Bucket(user_id=u.id, name="Operacional", description="Empresas", percent=50, type="operacional", balance=0),
+    Bucket(user_id=u.id, name="Empréstimos", description="", percent=20, type="emprestimo", balance=0),
+    Bucket(user_id=u.id, name="Cartões", description="", percent=15, type="cartao", balance=0),
+    Bucket(user_id=u.id, name="Ataque/Colchão", description="", percent=5, type="ataque", balance=0),
+]
+db.add_all(buckets); db.commit()
 
-[data-testid="stMetricValue"] { color: var(--primary); font-weight:600; }
-[data-testid="stMetricDelta"] { font-weight:600; }
-.streamlit-expanderHeader { color: var(--text); font-weight:600; }
-[data-testid="stTable"], .stDataFrame {
-  border-radius: 12px; overflow: hidden; border: 1px solid var(--bg-2);
-}
-</style>'''
+g1 = Giant(user_id=u.id, name="Cartão C6", total_to_pay=3500, parcels=6, months_left=6, priority=1, status="active")
+g2 = Giant(user_id=u.id, name="Empréstimo Banco", total_to_pay=12000, parcels=12, months_left=12, priority=2, status="active")
+db.add_all([g1, g2]); db.commit()
 
-def apply_style():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+today = date.today()
+b1 = Bill(user_id=u.id, title="Cartão C6 - Fatura", amount=850.0, due_date=today + timedelta(days=5), is_critical=True)
+b2 = Bill(user_id=u.id, title="Consórcio",        amount=420.0, due_date=today - timedelta(days=2), is_critical=True)
+b3 = Bill(user_id=u.id, title="Internet",         amount=120.0, due_date=today + timedelta(days=1), is_critical=False)
+db.add_all([b1, b2, b3]); db.commit()
+
+print("OK. Usuário criado:", u.name)
+db.close()
