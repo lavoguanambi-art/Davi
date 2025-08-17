@@ -1,13 +1,72 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Boolean
+from sqlalchemy.orm import relationship
+from db import Base
 
-DB_URL = "sqlite:///./davi.db"
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
 
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+    buckets = relationship("Bucket", back_populates="user", cascade="all, delete-orphan")
+    giants  = relationship("Giant",  back_populates="user", cascade="all, delete-orphan")
 
-# Habilitar FKs no SQLite
-with engine.connect() as con:
-    con.exec_driver_sql("PRAGMA foreign_keys=ON;")
+class Bucket(Base):
+    __tablename__ = "buckets"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, default="")
+    percent = Column(Float, nullable=False)
+    type = Column(String, default="generic")
+    balance = Column(Float, default=0.0)
 
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-Base = declarative_base()
+    user = relationship("User", back_populates="buckets")
+
+class Giant(Base):
+    __tablename__ = "giants"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    total_to_pay = Column(Float, nullable=False)
+    parcels = Column(Integer, default=0)
+    months_left = Column(Integer, default=0)
+    priority = Column(Integer, default=1)
+    status = Column(String, default="active")  # active | defeated
+
+    user = relationship("User", back_populates="giants")
+
+class Movement(Base):
+    __tablename__ = "movements"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    bucket_id = Column(Integer, ForeignKey("buckets.id", ondelete="SET NULL"), nullable=True)
+    kind = Column(String, nullable=False)  # income | expense | transfer
+    amount = Column(Float, nullable=False)
+    description = Column(String, default="")
+    date = Column(Date, nullable=False)
+
+class Bill(Base):
+    __tablename__ = "bills"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    due_date = Column(Date, nullable=False)
+    is_critical = Column(Boolean, default=False)
+    paid = Column(Boolean, default=False)
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    monthly_income  = Column(Float, default=0.0)
+    monthly_expense = Column(Float, default=0.0)
+
+class GiantPayment(Base):
+    __tablename__ = "giant_payments"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id  = Column(Integer, ForeignKey("users.id",   ondelete="CASCADE"), nullable=False)
+    giant_id = Column(Integer, ForeignKey("giants.id",  ondelete="CASCADE"), nullable=False)
+    amount   = Column(Float, nullable=False)
+    date     = Column(Date,  nullable=False)
+    note     = Column(String, default="")
